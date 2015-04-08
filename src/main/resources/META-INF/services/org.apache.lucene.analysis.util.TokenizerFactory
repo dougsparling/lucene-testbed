@@ -1,0 +1,2 @@
+# Custom tokenizers can go here
+ca.dougsparling.luceneblogpost.tokenizer.QuotationTokenizerFactory

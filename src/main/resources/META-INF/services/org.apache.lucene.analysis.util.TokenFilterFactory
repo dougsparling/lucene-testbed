@@ -1,0 +1,4 @@
+# Custom token filters can go here
+ca.dougsparling.luceneblogpost.filter.DebugFilterFactory
+ca.dougsparling.luceneblogpost.filter.QuotationTokenFilterFactory
+ca.dougsparling.luceneblogpost.filter.DialoguePayloadTokenFilterFactory
