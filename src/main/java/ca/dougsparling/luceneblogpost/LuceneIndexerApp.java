@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
@@ -22,21 +21,26 @@ public class LuceneIndexerApp {
 		this.indexPath = indexPath;
 	}
 
-	private void addToIndex(Path docPath) throws IOException {
+	private void addToIndex(Path docPath) throws IOException, InterruptedException {
 		Directory indexDir = FSDirectory.open(this.indexPath);
 		
 		Analyzer indexAnalyzer = CustomAnalyzers.dialogue();
 		
 		IndexWriterConfig writerConfig = new IndexWriterConfig(indexAnalyzer);
 		writerConfig.setOpenMode(OpenMode.CREATE);
+		writerConfig.setRAMBufferSizeMB(256.0);
 		
 		try (IndexWriter writer = new IndexWriter(indexDir, writerConfig)) {
-			Files.walkFileTree(docPath, new WriteFileToIndexVisitor(writer));
+			
+			WriteFileToIndexVisitor indexer = new WriteFileToIndexVisitor(writer);
+			Files.walkFileTree(docPath, indexer);
+			indexer.finish();
+			
 			writer.forceMerge(1);
 		}
 	}
 	
-	public static void main(String... args) throws IOException, ParseException {
-		new LuceneIndexerApp(Paths.get("./index")).addToIndex(Paths.get("F:\\6\\0\\2\\6023"));
+	public static void main(String... args) throws IOException, ParseException, InterruptedException {
+		new LuceneIndexerApp(Paths.get("./index")).addToIndex(Paths.get("F:\\"));
 	}
 }

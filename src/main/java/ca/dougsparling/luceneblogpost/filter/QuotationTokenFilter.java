@@ -8,25 +8,24 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
-import org.apache.lucene.util.AttributeSource;
 
 public class QuotationTokenFilter extends TokenFilter {
 
 	private static final char QUOTE = '"';
+	
 	public static final String QUOTE_START_TYPE = "start_quote";
 	public static final String QUOTE_END_TYPE = "end_quote";
 	
-	private final OffsetAttribute offset = getAttribute(OffsetAttribute.class);
-	private final TypeAttribute type = getAttribute(TypeAttribute.class);
-	private final CharTermAttribute termBuffer = getAttribute(CharTermAttribute.class);
+	private final OffsetAttribute offsetAttr = addAttribute(OffsetAttribute.class);
+	private final TypeAttribute typeAttr = addAttribute(TypeAttribute.class);
+	private final CharTermAttribute termBufferAttr = addAttribute(CharTermAttribute.class);
+	private final PositionIncrementAttribute posIncAttr = addAttribute(PositionIncrementAttribute.class);
 	
-	private final AttributeSource extraTerm = new AttributeSource(cloneAttributes());
-	private final OffsetAttribute extraTermOffset = extraTerm.getAttribute(OffsetAttribute.class);
-	private final TypeAttribute extraTermType = extraTerm.getAttribute(TypeAttribute.class);
-	private final CharTermAttribute extraTermBuffer = extraTerm.getAttribute(CharTermAttribute.class);
-	private final PositionIncrementAttribute extraPosInc = extraTerm.getAttribute(PositionIncrementAttribute.class);
-	
-	private boolean emitExtraTerm = false;
+	// analyzers will allocate space for internal state to avoid allocs in incrementToken
+	// can use captureState and restoreState, but that is slower
+	private boolean emitExtraToken;
+	private int extraTokenStartOffset, extraTokenEndOffset;
+	private String extraTokenType;
 	
 	protected QuotationTokenFilter(TokenStream input) {
 		super(input);
@@ -34,38 +33,40 @@ public class QuotationTokenFilter extends TokenFilter {
 	
 	@Override
 	public void reset() throws IOException {
-		extraTerm.clearAttributes();
-		emitExtraTerm = false;
+		emitExtraToken = false;
+		extraTokenStartOffset = -1;
+		extraTokenEndOffset = -1;
+		extraTokenType = null;
 		super.reset();
 	}
 	
 	@Override
 	public boolean incrementToken() throws IOException {
 		
-		if (emitExtraTerm) {
-			emitExtraTerm = false;
-			extraTerm.copyTo(this);
+		if (emitExtraToken) {
+			advanceToExtraToken();
+			emitExtraToken = false;
 			return true;
 		}
 		
 		boolean hasNext = input.incrementToken();
 		
 		if (hasNext) {
-			char[] buffer = termBuffer.buffer();
+			char[] buffer = termBufferAttr.buffer();
 			
-			if (termBuffer.length() > 1) {
+			if (termBufferAttr.length() > 1) {
 				
 				if (buffer[0] == QUOTE) {
 					// term starts with quote. Emit quote and extra term is the rest of the word
 					splitTermQuoteFirst();
-				} else if (buffer[termBuffer.length() - 1] == QUOTE) {
+				} else if (buffer[termBufferAttr.length() - 1] == QUOTE) {
 					// term ends with quote; emit a word and extra term is the quote
 					splitTermWordFirst();
 				}
-			} else if (termBuffer.length() == 1) {
+			} else if (termBufferAttr.length() == 1) {
 				if (buffer[0] == QUOTE) {
 					// a lone quote follows punctuation and is therefore likely to be an end quote
-					type.setType(QUOTE_END_TYPE);
+					typeAttr.setType(QUOTE_END_TYPE);
 				}
 			}
 			
@@ -75,41 +76,38 @@ public class QuotationTokenFilter extends TokenFilter {
 	}
 
 	private void splitTermQuoteFirst() {
-		prepareExtraTerm();
+		int origStart = offsetAttr.startOffset();
+		int origEnd = offsetAttr.endOffset();
 		
-		int origStart = offset.startOffset();
-		int origEnd = offset.endOffset();
-		int origLength = termBuffer.length();
+		offsetAttr.setOffset(origStart, origStart + 1);
+		typeAttr.setType(QUOTE_START_TYPE);
+		termBufferAttr.setLength(1);
 		
-		offset.setOffset(origStart, origStart + 1);
-		type.setType(QUOTE_START_TYPE);
-		termBuffer.setLength(1);
-		
-		extraTermOffset.setOffset(origStart + 1, origEnd);
-		extraTermBuffer.copyBuffer(termBuffer.buffer(), 1, origLength - 1);
-		extraTermBuffer.setLength(origLength - 1);
+		prepareExtraTerm(origStart + 1, origEnd, TypeAttribute.DEFAULT_TYPE);
 	}
 	
 	private void splitTermWordFirst() {
-		prepareExtraTerm();
+		int origStart = offsetAttr.startOffset();
+		int origEnd = offsetAttr.endOffset();
+		int origLength = termBufferAttr.length();
 		
-		int origStart = offset.startOffset();
-		int origEnd = offset.endOffset();
-		int origLength = termBuffer.length();
+		offsetAttr.setOffset(origStart, origEnd - 1);
+		termBufferAttr.setLength(origLength - 1);
 		
-		offset.setOffset(origStart, origEnd - 1);
-		termBuffer.setLength(origLength - 1);
-		
-		extraTermOffset.setOffset(origEnd - 1, origEnd);
-		extraTermBuffer.copyBuffer(termBuffer.buffer(), origEnd - 1, 1);
-		extraTermBuffer.setLength(1);
-		extraTermType.setType(QUOTE_END_TYPE);
+		prepareExtraTerm(origEnd - 1, origEnd, QUOTE_END_TYPE);
 	}
 
-	private void prepareExtraTerm() {
-		emitExtraTerm = true;
-		copyTo(extraTerm);
-		extraPosInc.setPositionIncrement(0);
+	private void prepareExtraTerm(int startOffset, int endOffset, String extraType) {
+		emitExtraToken = true;
+		this.extraTokenStartOffset = startOffset;
+		this.extraTokenEndOffset = endOffset;
+		this.extraTokenType = extraType;
 	}
 
+	private void advanceToExtraToken() {
+		termBufferAttr.copyBuffer(termBufferAttr.buffer(), extraTokenStartOffset - offsetAttr.startOffset(), extraTokenEndOffset - extraTokenStartOffset);
+		offsetAttr.setOffset(extraTokenStartOffset, extraTokenEndOffset);
+		typeAttr.setType(extraTokenType);
+		posIncAttr.setPositionIncrement(0);
+	}
 }

@@ -18,6 +18,9 @@ ideas/outline:
 		* writing a custom tokenizer is hard, but there are tricks available to help:
 			* using save/restore attributes
 			* extending existing tokenizers
+			
+	* filters:
+		* can skip attributes not using like offsets (if not storing term vector)
 	* lucene has many built-in tokenizers that are suitable for extension to simplify implementation
 	* can introduce payloads into each field
 

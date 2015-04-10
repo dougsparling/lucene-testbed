@@ -17,7 +17,7 @@ public class LuceneTest
     {
 		Analyzer dialogue = CustomAnalyzers.dialogue();
 		
-		TokenStream stream = dialogue.tokenStream("test", "Here is a \"phrase that has been quoted.\"");
+		TokenStream stream = dialogue.tokenStream("test", "Here is a \"phrase that has been quoted\", with extra stuff \"also quoted\" after it!");
 		
 		stream.reset();
 		while(stream.incrementToken());
