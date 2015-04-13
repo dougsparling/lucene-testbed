@@ -11,7 +11,7 @@ import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
 
-public final class DebugFilter extends TokenFilter {
+public final class DebugTokenFilter extends TokenFilter {
 
 	private final CharTermAttribute charTerm = getAttribute(CharTermAttribute.class);
 	private final OffsetAttribute offset = getAttribute(OffsetAttribute.class);
@@ -21,7 +21,7 @@ public final class DebugFilter extends TokenFilter {
 	
 	private final String name;
 	
-	public DebugFilter(TokenStream input, String name) {
+	public DebugTokenFilter(TokenStream input, String name) {
 		super(input);
 		this.name = name;
 	}

@@ -324,51 +324,6 @@ Lucene is a powerful, built-for-purpose library that takes a raw stream of chara
 
 By embedding Lucene directly into our applications, we can perform full text searches in real-time over gigabytes of content, and by way of custom analysis and scoring, take advantage of domain-specific features in our documents to provide relevant results or custom queries. 
 
-Full code listings are available on [GitHub](https://github.com/dougsparling/lucene-testbed), and the corpus of Project Gutenberg can be obtained [as a disk image via BitTorrent](https://www.gutenberg.org/wiki/Gutenberg:The_CD_and_DVD_Project#Downloading_Via_BitTorrent), free of charge from their website. The GitHub repository contains two applications: `LuceneIndexerApp` for building the index, and `LuceneQueryApp` for performing queries. Happy indexing!
+Full code listings are available on [GitHub](https://github.com/dougsparling/lucene-testbed), and the corpus of Project Gutenberg can be obtained [as a disk image via BitTorrent](https://www.gutenberg.org/wiki/Gutenberg:The_CD_and_DVD_Project#Downloading_Via_BitTorrent), free of charge from their website. The GitHub repository contains two applications: `LuceneIndexerApp` for building the index, and `LuceneQueryApp` for performing queries.
 
-
-
-### Similarity ###
-
-
-
-Solr custom parser with payloads:
-http://java.dzone.com/articles/payloads-are-neat-wheres
-
-
-
-
-If you're thinking that we could have done whatever else needs to be done in `QuotationTokenFilter`, and not bothered adding additional tokens, you're correct. However, adding tokens serves two purposes:
-
-1) Decoupling the logic for detecting start and end quotes from the actual marking of quotations
-2) Demonstrating both how to add and remove tokens from a stream, which are integral to writing filters.
-
-
-
- In accordance with the single-responsibility principle, it is also good for `TokenFilter`s to focus on doing only one thing, because juggling too many tasks in a single filter can easily result in our index being built incorrectly.
-
-What we want is to flag sections of text as dialogue for use during searches, and so we will create two filters: one to produce individual tokens for quotes, and one to mark the tokens *between* quotes as being part of dialogue.
-
-### Adding Quote Tokens ###
-
-
-
-To a newcomer, the Lucene API may seem strange. `TokenFilter` instances have to 
- 
-
- More importantly, the contents of the stream aren't read into memory all at once, which makes indexing less memory intensive.
-
-These characters flow into a Tokenizer, which collects them, and releases them as tokens. Lucene's [StandardTokenizer](http://lucene.apache.org/core/5_0_0/analyzers-common/index.html), roughly speaking, collects characters into words
-
-
-## Changing the Pipeline ##
-
-
- 
-
-
-
- Indexing occurs in three distinct steps: reading, tokenizing, and producing "terms" from those tokens.
-
- 
-Lucene scans documents, and creates an [inverted index](http://en.wikipedia.org/wiki/Inverted_index "inverted index") based on that text. 
+Happy indexing!

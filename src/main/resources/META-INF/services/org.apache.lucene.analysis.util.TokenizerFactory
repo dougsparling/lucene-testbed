@@ -1,2 +1,2 @@
-# Custom tokenizers can go here
+# Custom tokenizers are listed here, and are available by lowercase class name minus the -tokenizerfactory suffix.
 ca.dougsparling.luceneblogpost.tokenizer.QuotationTokenizerFactory

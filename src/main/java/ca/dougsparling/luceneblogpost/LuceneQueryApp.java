@@ -9,10 +9,8 @@ import java.util.Scanner;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.DocsAndPositionsEnum;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
@@ -31,7 +29,7 @@ import ca.dougsparling.luceneblogpost.search.DialogueAwareSimilarity;
 
 public class LuceneQueryApp {
 
-	private IndexReader reader;
+	private final IndexReader reader;
 	private final IndexSearcher searcher;
 	
 	private Scanner stdin = new Scanner(System.in);
@@ -44,57 +42,38 @@ public class LuceneQueryApp {
 	}
 	
 	private void loop() throws IOException, ParseException {
-		while(true) {
-			System.out.print("query: ");
-			
-			String queryText = stdin.nextLine();
-			
-			if (queryText.isEmpty()) {
-				break;
-			}
+		String queryText = askForNextQuery();
+		while(queryText != null) {
 			
 			Query query = buildQuery(queryText);
 			
-			TopDocs results = findTop10Docs(query);
+			TopDocs results = findTopDocs(query, 10);
 			
-			for (ScoreDoc result : results.scoreDocs) {
-				Document doc = searcher.doc(result.doc, singleton("title"));
-				
-				System.out.println("--- document " + doc.getField("title").stringValue() + " ---");
-				
-				Explanation explanation = this.searcher.explain(query, result.doc);
-				System.out.println(explanation);
-			}
+			printQueryResults(query, results);
+			
+			queryText = askForNextQuery();
 		}
 	}
-	
 
-	private TopDocs findTop10Docs(Query query) throws IOException {
-		TopScoreDocCollector collector = TopScoreDocCollector.create(10);
+	private String askForNextQuery() {
+		System.out.print("Query: ");
+		
+		String queryText = stdin.nextLine();
+		
+		if (queryText.isEmpty()) {
+			return null;
+		}
+		
+		return queryText;
+	}
+
+	private TopDocs findTopDocs(Query query, int topN) throws IOException {
+		TopScoreDocCollector collector = TopScoreDocCollector.create(topN);
 		searcher.search(query, new PositiveScoresOnlyCollector(collector));
-		TopDocs topDocs = collector.topDocs();
-		return topDocs;
+		return collector.topDocs();
 	}
 
-	private void printDocDebugInfo(ScoreDoc result) throws IOException {
-		TermsEnum iterator = reader.getTermVector(result.doc, "body").iterator(null);
-		
-		while(iterator.next() != null) {
-			DocsAndPositionsEnum pos = null;
-			pos = iterator.docsAndPositions(null, pos, DocsAndPositionsEnum.FLAG_OFFSETS | DocsAndPositionsEnum.FLAG_PAYLOADS);
-			
-			System.out.print("term: " + pos);
-			for (int ti = 0; ti < pos.freq(); ti++) {
-			}
-		}
-	}
-
-	private Query buildQuery(String queryText) throws IOException, ParseException {
-//		Analyzer queryAnalyzer = new StandardAnalyzer();
-//		QueryParser parser = new QueryParser("body", queryAnalyzer);
-//		Query query = parser.parse(queryText);
-//		return searcher.search(query, 5);
-		
+	private Query buildQuery(String queryText) throws IOException, ParseException {	
 		BooleanQuery allTermsInDialogue = new BooleanQuery();
 		String[] terms = queryText.split("\\W+");
 		for (String term : terms) {
@@ -103,9 +82,24 @@ public class LuceneQueryApp {
 		}		
 		return allTermsInDialogue;
 	}
+	
+	private void printQueryResults(Query query, TopDocs results) throws IOException {
+		for (ScoreDoc result : results.scoreDocs) {
+			Document doc = searcher.doc(result.doc, singleton("title"));
+			
+			System.out.println("--- Document " + doc.getField("title").stringValue() + " ---");
+			
+			Explanation explanation = this.searcher.explain(query, result.doc);
+			System.out.println(explanation);
+		}
+	}
 
 	public static void main(String[] args) throws IOException, ParseException {
-		LuceneQueryApp queryApp = new LuceneQueryApp(Paths.get("./index"));
+		if (args.length != 1) {
+			System.err.println("Usage: LuceneQueryApp pathToExistingIndex");
+			System.exit(1);
+		}
+		LuceneQueryApp queryApp = new LuceneQueryApp(Paths.get(args[0]));
 		queryApp.loop();
 	}
 }
