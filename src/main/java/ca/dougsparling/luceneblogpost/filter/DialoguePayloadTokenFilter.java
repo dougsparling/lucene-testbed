@@ -5,7 +5,6 @@ import java.io.IOException;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
 import org.apache.lucene.util.BytesRef;
 
@@ -13,10 +12,9 @@ public class DialoguePayloadTokenFilter extends TokenFilter {
 
 	private final TypeAttribute typeAttr = getAttribute(TypeAttribute.class);
 	private final PayloadAttribute payloadAttr = addAttribute(PayloadAttribute.class);
-	private final PositionIncrementAttribute posIncAttr = addAttribute(PositionIncrementAttribute.class);
 	
-	private static final BytesRef DIALOGUE_PAYLOAD = new BytesRef(new byte[] { 1 }); 
-	private static final BytesRef NO_DIALOGUE_PAYLOAD = new BytesRef(new byte[] { 0 }); 
+	private static final BytesRef PAYLOAD_DIALOGUE = new BytesRef(new byte[] { 1 }); 
+	private static final BytesRef PAYLOAD_NOT_DIALOGUE = new BytesRef(new byte[] { 0 }); 
 	
 	private boolean withinDialogue;
 	
@@ -40,25 +38,19 @@ public class DialoguePayloadTokenFilter extends TokenFilter {
 			
 			if (isStartQuote) {
 				withinDialogue = true;
-				hasNext = skipToken();
+				hasNext = input.incrementToken();
 			} else if (isEndQuote) {
 				withinDialogue = false;
-				hasNext = skipToken();
+				hasNext = input.incrementToken();
 			} else {
 				break;
 			}
 		}
 		
 		if (hasNext) {
-			payloadAttr.setPayload(withinDialogue ? DIALOGUE_PAYLOAD : NO_DIALOGUE_PAYLOAD);
+			payloadAttr.setPayload(withinDialogue ? PAYLOAD_DIALOGUE : PAYLOAD_NOT_DIALOGUE);
 		}
 		
-		return hasNext;
-	}
-
-	private boolean skipToken() throws IOException {
-		boolean hasNext = input.incrementToken();
-		posIncAttr.setPositionIncrement(0);
 		return hasNext;
 	}
 }

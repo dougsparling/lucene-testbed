@@ -41,6 +41,6 @@ public class LuceneIndexerApp {
 	}
 	
 	public static void main(String... args) throws IOException, ParseException, InterruptedException {
-		new LuceneIndexerApp(Paths.get("./index")).addToIndex(Paths.get("F:\\"));
+		new LuceneIndexerApp(Paths.get("./index-uthph10")).addToIndex(Paths.get("./docs"));
 	}
 }

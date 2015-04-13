@@ -19,7 +19,6 @@ public class QuotationTokenFilter extends TokenFilter {
 	private final OffsetAttribute offsetAttr = addAttribute(OffsetAttribute.class);
 	private final TypeAttribute typeAttr = addAttribute(TypeAttribute.class);
 	private final CharTermAttribute termBufferAttr = addAttribute(CharTermAttribute.class);
-	private final PositionIncrementAttribute posIncAttr = addAttribute(PositionIncrementAttribute.class);
 	
 	// analyzers will allocate space for internal state to avoid allocs in incrementToken
 	// can use captureState and restoreState, but that is slower
@@ -108,6 +107,5 @@ public class QuotationTokenFilter extends TokenFilter {
 		termBufferAttr.copyBuffer(termBufferAttr.buffer(), extraTokenStartOffset - offsetAttr.startOffset(), extraTokenEndOffset - extraTokenStartOffset);
 		offsetAttr.setOffset(extraTokenStartOffset, extraTokenEndOffset);
 		typeAttr.setType(extraTokenType);
-		posIncAttr.setPositionIncrement(0);
 	}
 }
