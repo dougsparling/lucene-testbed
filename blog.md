@@ -57,13 +57,13 @@ Note how the quotes are interspersed within the tokens. It is possible to write 
 
 ### Splitting Tokens using Filters ###
 
-After the `Tokenizer` come a series of `TokenFilter`s. "Filter" is a bit of a misnomer, as `TokenFilter`s can add, remove, or modify tokens.
+After the tokenizer comes a series of `TokenFilter` objects. *Filter* is a bit of a misnomer, as a `TokenFilter` can add, remove, or modify tokens.
 
-Many of the `TokenFilter`s provided by Lucene expect single words, and so it won't do to have our quote-containing tokens flow into them. Thus, our next customization must be the introduction of a filter that will clean up the output of `QuotationTokenizer`.
+Many of the filters classes provided by Lucene expect single words, and so it won't do to have our mixed word-and-quote tokens flow into them. Thus, our next customization must be the introduction of a filter that will clean up the output of `QuotationTokenizer`.
 
 This cleanup will involve the production of an extra *start quote* token if the quote appears at the beginning of a word, or an *end quote* token if the quote appears at the end. We will put aside the handling of single quoted words for simplicity.
 
-Creating a `TokenFilter` subclass involves implementing one method: `incrementToken`. This method must call `incrementToken` on the previous filter in the pipe, and then manipulate the results of that call to perform whatever work the filter is responsible for. The results of `incrementToken` take the form of Lucene `Attribute`s, which describe the current state of token processing. After our implementation of `incrementToken` returns, it is expected that the attributes have been manipulated to setup the token for the next filter (or the index if we are at the end of the pipe).
+Creating a `TokenFilter` subclass involves implementing one method: `incrementToken`. This method must call `incrementToken` on the previous filter in the pipe, and then manipulate the results of that call to perform whatever work the filter is responsible for. The results of `incrementToken` are available via `Attribute` objects, which describe the current state of token processing. After our implementation of `incrementToken` returns, it is expected that the attributes have been manipulated to setup the token for the next filter (or the index if we are at the end of the pipe).
 
 The attributes we are interested in at this point in the pipeline are:
 
@@ -71,7 +71,7 @@ The attributes we are interested in at this point in the pipeline are:
 * `TypeAttribute`: Contains the "type" of the current token. Because we are adding start and end quotes to the token stream, we will introduce two new types using our filter.
 * `OffsetAttribute`: Lucene can optionally store references to the location of terms in the original document. These references are called offsets, and are just start and end indices into the original character stream. If we change the buffer in `CharTermAttribute` to point at just a substring of the token, we must adjust these offsets accordingly.
 
-You may be wondering why the API for manipulating token streams is so convoluted, and why we can't just do something like `String#split` on the incoming tokens. This is because Lucene is designed for high-speed, low-overhead indexing, and the built-in tokenizers and filters can quickly chew through gigabytes of text while using only megabytes of memory. To achieve this, few or no allocations are done during tokenization and filtering, and so the `Attribute` instances mentioned above are intended to be allocated once and reused. If your tokenizers and filters are written in this way, you can customize Lucene without compromising performance.
+You may be wondering why the API for manipulating token streams is so convoluted, and why we can't just do something like `String#split` on the incoming tokens. This is because Lucene is designed for high-speed, low-overhead indexing, and the built-in tokenizers and filters can quickly chew through gigabytes of text while using only megabytes of memory. To achieve this, few or no allocations are done during tokenization and filtering, and so the `Attribute` instances mentioned above are intended to be allocated once and reused. If your tokenizers and filters are written in this way, and minimize their own allocations, you can customize Lucene without compromising performance.
 
 With all that in mind, let's see how to implement a filter that takes a token such as `["Hello]`, and produces the two tokens, `["]` and `[Hello]`:
 
@@ -85,15 +85,13 @@ With all that in mind, let's see how to implement a filter that takes a token su
 		private final TypeAttribute typeAttr = addAttribute(TypeAttribute.class);
 		private final CharTermAttribute termBufferAttr = addAttribute(CharTermAttribute.class);
 
-We start by obtaining references to some of the attributes that we saw earlier. We suffix the field names with "Attr" so it will be clear later when we refer to them. It is possible that some `Tokenizer` implementations do not provide these attributes, so we use `addAttribute`. `addAttribute` will create an attribute instance if it is missing, otherwise grab a shared reference to the attribute of that type. Lucene does not allow multiple instances of the same attribute type at once.
+We start by obtaining references to some of the attributes that we saw earlier. We suffix the field names with "Attr" so it will be clear later when we refer to them. It is possible that some `Tokenizer` implementations do not provide these attributes, so we use `addAttribute` to get our references. `addAttribute` will create an attribute instance if it is missing, otherwise grab a shared reference to the attribute of that type. Lucene does not allow multiple instances of the same attribute type at once.
 
 	private boolean emitExtraToken;
 	private int extraTokenStartOffset, extraTokenEndOffset;
 	private String extraTokenType;
 
 Because our filter will introduce a new token that is not present in the original stream, we need a place to save the state of that token between calls to `incrementToken`. Because we're splitting an existing token into two, it is enough to know just the offsets and type of the new token. We also have a flag that tells us whether the next call to `incrementToken` will be emitting this extra token. Lucene actually provides a pair of methods, `captureState` and `restoreState`, which will do this for you, but it involves the allocation of a `State` object and can actually be trickier than simply managing that state yourself, so we'll avoid using them.
-
-If we were going to be emitting multiple tokens, and knew ahead of time how many we might be expected to produce, we could pre-allocate these fields as fixed-length arrays -- a technique used by `SynonymFilter`, for example.
 
 	@Override
 	public void reset() throws IOException {
@@ -170,7 +168,7 @@ The remainder of `incrementToken` will do one of three different things. Recall 
 
 Because we want to split this token with the quote appearing in the stream first, we truncate the buffer by setting the length to one, i.e. one character: the quote. We adjust the offsets accordingly (i.e. pointing to the quote in the original document), and also set the type to be a starting quote.
 
-`prepareExtraTerm` will set the `extra*` fields, and is called with offsets pointing at the "extra" token, i.e. the word following the quote.
+`prepareExtraTerm` will set the `extra*` fields and set `emitExtraToken` to true, and is called with offsets pointing at the "extra" token, i.e. the word following the quote.
 
 The entirety of `QuotationTokenFilter` is [available on Github](https://github.com/dougsparling/lucene-testbed/blob/master/src/main/java/ca/dougsparling/luceneblogpost/filter/QuotationTokenFilter.java).
 
@@ -317,7 +315,7 @@ To execute the query, we hand it off to the `IndexSearcher`:
 	searcher.search(query, new PositiveScoresOnlyCollector(collector));
 	TopDocs topDocs = collector.topDocs();
 	
-`Collector`s are used to prepare the collection of matching documents. To achieve a combination of sorting, limiting and filtering, `Collector`s can be composed. To get the top ten scoring documents that contain at least one term in dialogue, we combine `TopScoreDocCollector` and `PositiveScoresOnlyCollector`. Taking only positive scores ensures that the zero score matches, i.e. those with no terms in dialogue, are filtered out. 
+`Collector` objects are used to prepare the collection of matching documents. To achieve a combination of sorting, limiting and filtering, collectors can be composed. To get the top ten scoring documents that contain at least one term in dialogue, we combine `TopScoreDocCollector` and `PositiveScoresOnlyCollector`. Taking only positive scores ensures that the zero score matches, i.e. those with no terms in dialogue, are filtered out. 
 
 To see this query in action, we can execute it, then use `IndexSearcher#explain` to see how individual documents were scored:
 
