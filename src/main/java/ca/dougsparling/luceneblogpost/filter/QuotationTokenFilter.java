@@ -25,7 +25,7 @@ public class QuotationTokenFilter extends TokenFilter {
 	private int extraTokenStartOffset, extraTokenEndOffset;
 	private String extraTokenType;
 	
-	protected QuotationTokenFilter(TokenStream input) {
+	public QuotationTokenFilter(TokenStream input) {
 		super(input);
 	}
 	

@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -20,12 +20,12 @@ import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 
-final class WriteFileToIndexVisitor extends SimpleFileVisitor<Path> {
+final class AsyncWriteFileToIndexVisitor extends SimpleFileVisitor<Path> {
 
 	private final IndexWriter writer;
-	private final ExecutorService executor;
+	private final Executor executor;
 
-	public WriteFileToIndexVisitor(IndexWriter writer, ExecutorService executor) {
+	public AsyncWriteFileToIndexVisitor(IndexWriter writer, Executor executor) {
 		this.writer = writer;
 		this.executor = executor;
 	}
@@ -34,10 +34,8 @@ final class WriteFileToIndexVisitor extends SimpleFileVisitor<Path> {
 	public FileVisitResult visitFile(Path path, BasicFileAttributes attrs)
 			throws IOException {
 		
-		if (path.toFile().isFile()) {
-			executor.submit(() -> indexPath(path));
-		}
-
+		executor.execute(() -> indexPath(path));
+		
 		return FileVisitResult.CONTINUE;
 	}
 	
@@ -51,7 +49,7 @@ final class WriteFileToIndexVisitor extends SimpleFileVisitor<Path> {
 				indexStream(textStream, baseFileName);
 			}
 		} catch (IOException e) {
-			System.err.println("Error indexing: " + e.getMessage());
+			System.err.println("Error indexing (" + path + "): " + e.getMessage());
 		}
 	}
 
@@ -76,6 +74,8 @@ final class WriteFileToIndexVisitor extends SimpleFileVisitor<Path> {
 	}
 
 	private void indexStream(InputStream inputStream, String title) throws IOException {
+		
+		System.out.printf("Indexing %s\n", title);
 		
 		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
 

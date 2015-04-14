@@ -8,9 +8,9 @@ import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.custom.CustomAnalyzer;
 
 /**
- * Builds custom, example analyzers. 
+ * <p>Builds custom, example analyzers using SPI factories.
  * 
- * {@link Tokenizer}s and {@link TokenFilter}s are loaded using SPI (see
+ * <p>{@link Tokenizer}s and {@link TokenFilter}s are loaded using SPI (see
  * the META-INF directory for more information)
  */
 public class CustomAnalyzers {
@@ -27,6 +27,14 @@ public class CustomAnalyzers {
 		return standardAnalyzer;
 	}
 	
+	/**
+	 * <p>Builds an Analyzer that injects payloads for tokens within dialogue.
+	 * Essentially the same thing as {@link DialogueAnalyzer}, just constructed
+	 * differently.
+	 * 
+	 * <p>You would use a {@link CustomAnalyzer} such sa this if configuring from
+	 * Solr, Elasticsearch, etc. 
+	 */
 	public static Analyzer dialogue() throws IOException {
 		
 		/*

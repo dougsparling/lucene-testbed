@@ -32,7 +32,7 @@ public class LuceneIndexerApp {
 	private void addToIndex(Path docPath) throws IOException, InterruptedException {
 		Directory indexDir = FSDirectory.open(this.indexPath);
 		
-		Analyzer indexAnalyzer = CustomAnalyzers.dialogue();
+		Analyzer indexAnalyzer = new DialogueAnalyzer();
 		
 		IndexWriterConfig writerConfig = new IndexWriterConfig(indexAnalyzer);
 		writerConfig.setOpenMode(OpenMode.CREATE);
@@ -40,12 +40,11 @@ public class LuceneIndexerApp {
 		ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 		
 		try (IndexWriter writer = new IndexWriter(indexDir, writerConfig)) {
-			WriteFileToIndexVisitor indexer = new WriteFileToIndexVisitor(writer, threadPoolExecutor);
-			Files.walkFileTree(docPath, indexer);
-			writer.forceMerge(1);
-		} finally {
+			AsyncWriteFileToIndexVisitor fileAsyncIndexer = new AsyncWriteFileToIndexVisitor(writer, threadPoolExecutor);
+			Files.walkFileTree(docPath, fileAsyncIndexer);
 			threadPoolExecutor.shutdown();
 			threadPoolExecutor.awaitTermination(1, TimeUnit.HOURS);
+			writer.forceMerge(1, true);
 		}
 	}
 	

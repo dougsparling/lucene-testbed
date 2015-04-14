@@ -18,7 +18,7 @@ public class DialoguePayloadTokenFilter extends TokenFilter {
 	
 	private boolean withinDialogue;
 	
-	protected DialoguePayloadTokenFilter(TokenStream input) {
+	public DialoguePayloadTokenFilter(TokenStream input) {
 		super(input);
 	}
 	
