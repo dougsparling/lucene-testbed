@@ -1,10 +1,10 @@
-# Custom Analysis using Apache Lucene #
+# Full Text Search of Dialogue with Apache Lucene #
 
 [Apache Lucene](https://lucene.apache.org/core/) is a Java library used for full-text searching of documents, and is at the core of search servers like [Solr](http://lucene.apache.org/solr/) and [Elasticsearch](https://www.elastic.co/products/elasticsearch). It can also be embedded into Java applications, such as Android apps or web back-ends.
 
-While Lucene's configuration options are extensive, they are intended for use on a generic corpus of text. If your documents have a specific structure or contents, you can take advantage of this to improve search quality and query capability.
+While Lucene's configuration options are extensive, they are intended for use on a generic corpus of text. If your documents have a specific structure or contents, you can take advantage of either to improve search quality and query capability.
 
-As an example, we will index the corpus of [Project Gutenberg](https://www.gutenberg.org/), which offers thousands of free ebooks. We know that many of these books are novels, and suppose we are interested in searching the dialogue within these novels. None of Lucene, Elasticsearch or Solr have out-of-the-box tools for doing so, and in fact will throw away punctuation at the earliest stages of text analysis.
+As an example of this sort of customization, we will index the corpus of [Project Gutenberg](https://www.gutenberg.org/), which offers thousands of free ebooks. We know that many of these books are novels, and suppose we are especially interested in the *dialogue* within these novels. None of Lucene, Elasticsearch or Solr have out-of-the-box tools for matching dialogue, and in fact will throw away punctuation at the earliest stages of text analysis.
 
 So these early stages are where our customization must begin.
 
@@ -17,6 +17,8 @@ At a high level, you can think of the analysis pipeline as consuming a raw strea
 The standard analysis pipeline can be visualized as such:
 
 `(image of standard tokenizer, filters, etc.)`
+
+We will see how to customize this pipeline to recognize regions of text marked by double-quotes, which I will call dialogue, and then bump up matches that occur when searching in those regions.
 
 ### Reading Characters ###
 
@@ -36,7 +38,7 @@ We can see that each ebook will correspond to a single Lucene `Document`, so lat
 
 The actual reading of the stream begins with `addDocument`. The `IndexWriter` pulls tokens from the end of the pipeline. This pull proceeds back through the pipe until the first stage, the `Tokenizer`, reads from the `InputStream`.
 
-Also note that we don't close the stream -- Lucene handles this for us. 
+Also note that we don't close the stream, as Lucene handles this for us. 
 
 ### Tokenizing Characters ###
 
@@ -236,11 +238,9 @@ For example, `DialoguePayloadTokenFilter` will transform the token stream:
 
 	[the], [program], [printed], ["], [hello], [world], ["]`
 
-into:
+into this new stream:
 
-	[the], [program], [printed], [hello*], [world*]
-
-Where `*` denotes a payload of `1`.
+	[the][0], [program][0], [printed][0], [hello][1], [world][1]
 
 ### Tying Tokenizers and Filters Together ###
 
@@ -264,13 +264,17 @@ An `Analyzer` is responsible for assembling the analysis pipeline, typically by 
 
 As we saw earlier, filters contain a reference back to the previous stage in the pipeline, so that is how we instantiate them. We also slide in a few filters from `StandardAnalyzer`: `LowerCaseFilter` and `StopFilter`. These two must come after `QuotationTokenFilter` to ensure that any quotes have been separated. We can be more flexible in our placement of `DialoguePayloadTokenFilter`, anywhere after `QuotationTokenFilter` will do. So we put it after `StopFilter` to avoid wasting time injecting the dialogue payload into [stop words](http://en.wikipedia.org/wiki/Stop_words) that will ultimately be removed.
 
+Here is a visualization of our new pipeline in action (minus parts of the standard pipeline we have removed or already seen): 
+
+`(~~~ illustration of customized pipeline ~~~)`
+
 `DialogueAnalyzer` can now be used as any other stock `Analyzer` would be, and now we can build the index and move on to search. 
 
 ## Searching Dialogue ##
 
 If we wanted to only search dialogue, we could have simply discarded all tokens outside of a quotation, and we would be done. Instead, by leaving all of the original tokens intact, we've given ourselves flexibility to do queries that take dialogue into account, or treat it like any other part of text.
 
-The basics of querying a Lucene index [well documented](http://lucene.apache.org/core/5_0_0/core/org/apache/lucene/search/package-summary.html#package_description), and for our purposes it is enough to know that queries are composed of `Term` objects stuck together with operators such as `MUST` or `SHOULD`, and match documents based on those terms. Matching documents are then scored based on a configurable `Similarity` object, and those results can be ordered by score, filtered or limited. For example, Lucene allows us to do a query for the top ten documents that must contain both of the terms `[hello]` and `[world]`.
+The basics of querying a Lucene index are [well documented](http://lucene.apache.org/core/5_0_0/core/org/apache/lucene/search/package-summary.html#package_description), and for our purposes it is enough to know that queries are composed of `Term` objects stuck together with operators such as `MUST` or `SHOULD`, and match documents based on those terms. Matching documents are then scored based on a configurable `Similarity` object, and those results can be ordered by score, filtered or limited. For example, Lucene allows us to do a query for the top ten documents that must contain both of the terms `[hello]` and `[world]`.
 
 Customizing search results based on dialogue can be done by adjusting a document's score based on payload. The first extension point for this will be in `Similarity`, which is responsible for weighing and scoring matching terms.  
 
@@ -302,12 +306,25 @@ Now that we have our new `Similarity` implementation, it must then be set on the
 
 Now that our `IndexSearcher` can score payloads, we also have to construct a query that is payload-aware. `PayloadTermQuery` can be used to match a single `Term` while also checking the payloads of those matches:
 
-	String searchTerm = "hello";
-	PayloadTermQuery query = new PayloadTermQuery(new Term("body", searchTerm), new AveragePayloadFunction());
+	PayloadTermQuery helloQuery = new PayloadTermQuery(new Term("body", "hello"), new AveragePayloadFunction());
 
 This query matches the term `[hello]` within the *body* field (recall this is where we put the contents of the document). We must also provide a function to compute the final payload score from all term matches, so we plug in `AveragePayloadFunction`, which averages all payload scores. For example, if the term `[hello]` occurs inside dialogue twice and outside dialogue once, the final payload score will be &sup2;&frasl;&#8323;. This final payload score is multiplied with the one provided by `DefaultSimilarity` for the entire document.
 
 We use an average because we would like to sink search results where many terms appear outside of dialogue, and to score zero for documents without any terms in dialogue at all.
+
+We can also compose several `PayloadTermQuery` objects using a `BooleanQuery` if we want to search for multiple terms contained in dialogue (note that the order of the terms is irrelevant in this query, though other query types are position-aware):
+
+	PayloadTermQuery worldQuery = new PayloadTermQuery(new Term("body", "world"), new AveragePayloadFunction());
+
+	BooleanQuery query = new BooleanQuery();
+	query.add(helloQuery, Occur.MUST);
+	query.add(worldQuery, Occur.MUST);
+
+When this query is executed, we can see how the query structure and similarity implementation work together:
+
+`(~~~ diagram of search across multiple documents ~~~)`
+
+### Query Execution and Explanation ###
 
 To execute the query, we hand it off to the `IndexSearcher`:
 
